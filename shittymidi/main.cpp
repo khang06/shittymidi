@@ -60,9 +60,9 @@ int main(int argc, char** argv) {
         }
         std::cout << "Type the number of the MIDI out device you want." << std::endl;
         std::cin >> chosen_device;
-        std::wcout << "Opening " << midi_out_devices.at(chosen_device) << "..." << std::endl;
         if (chosen_device > i)
             throw "Invalid device!";
+        std::wcout << "Opening " << midi_out_devices.at(chosen_device) << "..." << std::endl;
         if (midiOutOpen(&player->midi_out_handle, chosen_device, NULL, 0, NULL) != MMSYSERR_NOERROR)
             throw "Failed to open device!";
 
