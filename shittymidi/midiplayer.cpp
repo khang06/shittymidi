@@ -8,12 +8,12 @@ MidiPlayer::MidiPlayer(MidiFile* file) {
     tick_length = 500 / file->division; // 500 ms per quarter note
 }
 
-void MidiPlayer::NoteEvent(bool status, uint8_t velocity, uint8_t note, uint8_t channel) {
+void MidiPlayer::NoteEvent(bool status, uint8_t note, uint8_t velocity, uint8_t channel) {
     // status = 0 = note off
     // status = 1 = note on
     DWORD message;
 
-    message = ((((((channel) & 0x0F | (status ? 9 : 8) << 4) & 0xFF) | ((note & 0xFF) << 8)) & 0xFFFF) | ((velocity & 0xFF) << 16));
+    message = ((((((channel) & 0x0F | (status ? 9 : 8) << 4) & 0xFF) | ((velocity & 0xFF) << 8)) & 0xFFFF) | ((note & 0xFF) << 16));
     midiOutShortMsg(midi_out_handle, message);
 }
 
@@ -102,12 +102,33 @@ void MidiPlayer::ProcessCommand(MidiTrack& track) {
                 midiOutShortMsg(midi_out_handle, ((cmd & 0xFF) | ((track.ReadByte() & 0xFF) << 8)));
                 break;
             case 0x0F: // System Message
-                std::cout << "System Message is UNIMPLEMENTED!!!" << std::endl;
-                std::cout << (cmd & 0x0F) << std::endl;
-                // this command does such a wide range of things that doing anything here would still break something
+                switch (cmd & 0x0F) {
+                    case 0x00: // System Exclusive
+                    case 0x07: // End Of Exclusive
+                        std::cout << "SysEx is UNIMPLEMENTED!!! This MIDI will not play correctly!!!" << std::endl;
+                        break;
+                    case 0x01: // MIDI Time Code Quarter Frame
+                    case 0x03: // Song Select
+                        track.SkipBytes(1);
+                        break;
+                    case 0x02: // Song Position Pointer
+                        track.SkipBytes(2);
+                        break;
+                    case 0x06: // Tune Request
+                    case 0x08: // Timing Clock
+                    case 0x0A: // Start
+                    case 0x0B: // Continue
+                    case 0x0C: // Stop
+                    case 0x0E: // Active Sensing
+                    case 0x0F: // Reset
+                        // these are probably safe to ignore, so nothing happens here
+                        break;
+                    default:
+                        std::cout << "Unhandled System Event " << std::hex << (cmd & 0xF) << std::dec << std::endl;
+                }
                 break;
             default:
-                std::cout << "Unhandled MIDI event " << (cmd >> 4) << std::endl;
+                std::cout << "Unhandled MIDI event " << std::hex << (cmd >> 4) << std::dec << std::endl;
         }
         //std::cout << "MIDI Event " << std::hex << (uint32_t)(cmd >> 4) << std::dec << std::endl;
     }
