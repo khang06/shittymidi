@@ -15,10 +15,14 @@ drag and drop a midi file onto shittymidi.exe
 
 [Standard MIDI-File Format Spec. 1.1, updated](http://www.music.mcgill.ca/~ich/classes/mumt306/StandardMIDIfileformat.html) - another good reference for midi format
 
+# compatibility
+i threw random midi files i had laying around on my computer at this, here's how the currently play
+
+
 # todo (in no specific order)
 - [ ] fix desyncs on most midis (very very important)
 - [ ] use tables instead of switch case (is this actually faster?)
-- [ ] less buggy note counter
+- [x] less buggy note counter
 - [ ] better documentation
 - [ ] better code overall
 - [ ] piano from above-like gui (probably after everything else is done)
