@@ -104,8 +104,7 @@ void MidiPlayer::ProcessCommand(MidiTrack& track) {
             case 0x0F: // System Message
                 switch (cmd & 0x0F) {
                     case 0x00: // System Exclusive
-                    case 0x07: // End Of Exclusive
-                        std::cout << "SysEx is UNIMPLEMENTED!!! This MIDI will not play correctly!!!" << std::endl;
+                        track.SkipBytes(track.ReadVlq());
                         break;
                     case 0x01: // MIDI Time Code Quarter Frame
                     case 0x03: // Song Select
@@ -115,6 +114,7 @@ void MidiPlayer::ProcessCommand(MidiTrack& track) {
                         track.SkipBytes(2);
                         break;
                     case 0x06: // Tune Request
+                    case 0x07: // End Of Exclusive
                     case 0x08: // Timing Clock
                     case 0x0A: // Start
                     case 0x0B: // Continue
