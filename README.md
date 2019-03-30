@@ -37,6 +37,6 @@ i threw random midi files i had laying around on my computer at this, here's how
 - [ ] better documentation
 - [ ] better code overall
 - [ ] piano from above-like gui (probably after everything else is done)
-- [ ] handle sysex (very important)
+- [x] handle sysex (very important)
 - [ ] stream from file instead of loading into memory
 - [ ] command line options
