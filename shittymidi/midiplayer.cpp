@@ -112,7 +112,8 @@ void MidiPlayer::ProcessCommand(MidiTrack& track) {
                 break;
             case 0x0C: // Program Change
             case 0x0D: // Channel after-touch 
-                midiOutShortMsg(midi_out_handle, ((cmd & 0xFF) | ((track.ReadByte() & 0xFF) << 8)));
+                bruh = ((cmd & 0xFF) | ((track.ReadByte() & 0xFF) << 8));
+                midiOutShortMsg(midi_out_handle, bruh);
                 break;
             case 0x0F: // System Message
                 switch (cmd & 0x0F) {
@@ -181,8 +182,9 @@ void MidiPlayer::Play() {
             }
             if (!track.enabled)
                 continue;
-            if (track.cur_event_end < next_trigger)
+            if (track.cur_event_end < next_trigger) {
                 next_trigger = track.cur_event_end;
+            }
         }
         read_first_event = false;
         //cur_time = GetTickCount64();

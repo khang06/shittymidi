@@ -89,6 +89,7 @@ int main(int argc, char** argv) {
                     message[previous_string_size + 1] = '\0';
                 }
                 printf("\r%s\n", message);
+				player->message_pending = false;
             }
             // stringstreams are slow, let's do it c-style!
             // any unused space will be replaced with a space to prevent overlapping if the previous message was longer than the current
