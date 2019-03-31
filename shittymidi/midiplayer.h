@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <string>
 #include <Windows.h>
 #include <mmsystem.h>
 #include "midifile.h"
@@ -21,8 +22,12 @@ public:
     uint32_t start_time = 0;
     uint64_t played_notes = 0;
     bool playing = false;
+    // a better implementation would be to implement a queue with a std::vector, but that would cause race conditions
+    bool message_pending = false;
+    char message[0x100];
 
 private:
     void ProcessCommand(MidiTrack& track);
     void NoteEvent(bool status, uint8_t note, uint8_t velocity, uint8_t channel);
+    void SendMessageToConsole(const char* format, ...);
 };

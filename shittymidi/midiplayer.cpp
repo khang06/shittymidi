@@ -1,11 +1,23 @@
-#include <Windows.h>
+﻿#include <Windows.h>
 #include <mmsystem.h>
 #include <iostream>
+#include <cstdarg>
 #include "midiplayer.h"
 
 MidiPlayer::MidiPlayer(MidiFile* file) {
     loaded_file = file;
     tick_length = 500 / file->division; // 500 ms per quarter note
+}
+
+// main thread will handle the rest, this is to prevent interfering with note counter
+void MidiPlayer::SendMessageToConsole(const char* format, ...) {
+    // no queue, so the message won't be sent if one's pending ¯\_(ツ)_/¯
+    if (message_pending)
+        return;
+    va_list args;
+    va_start(args, format);
+    vsnprintf(message, 0x100, format, args);
+    message_pending = true;
 }
 
 void MidiPlayer::NoteEvent(bool status, uint8_t note, uint8_t velocity, uint8_t channel) {
@@ -45,8 +57,6 @@ void MidiPlayer::ProcessCommand(MidiTrack& track) {
             case 0x00: // Sequence Number
                 track.SkipBytes(2);
                 break;
-            default:
-                std::cout << "Unhandled Meta Event " << std::hex << (uint32_t)cmd << std::dec << std::endl;
             case 0x01: // Text Event
             case 0x02: // Copyright Notice
             case 0x03: // Sequence/Track Name
@@ -79,6 +89,9 @@ void MidiPlayer::ProcessCommand(MidiTrack& track) {
             case 0x59: // Key Signature
                 track.SkipBytes(2);
                 break;
+            default:
+                //std::cout << "Unhandled Meta Event " << std::hex << (uint32_t)cmd << std::dec << std::endl;
+                SendMessageToConsole("Unhandled Meta Event 0x%X", cmd);
         }
         //std::cout << "Meta Event " << std::hex << (uint32_t)cmd << std::dec << std::endl;
     }
@@ -124,11 +137,13 @@ void MidiPlayer::ProcessCommand(MidiTrack& track) {
                         // these are probably safe to ignore, so nothing happens here
                         break;
                     default:
-                        std::cout << "Unhandled System Event " << std::hex << (cmd & 0xF) << std::dec << std::endl;
+                        //std::cout << "Unhandled System Event " << std::hex << (cmd & 0xF) << std::dec << std::endl;
+                        SendMessageToConsole("Unhandled System Event 0x%X", cmd & 0x0F);
                 }
                 break;
             default:
-                std::cout << "Unhandled MIDI event " << std::hex << (cmd >> 4) << std::dec << std::endl;
+                //std::cout << "Unhandled MIDI event " << std::hex << (cmd >> 4) << std::dec << std::endl;
+                SendMessageToConsole("Unhandled MIDI Event 0x%X", cmd >> 4);
         }
         //std::cout << "MIDI Event " << std::hex << (uint32_t)(cmd >> 4) << std::dec << std::endl;
     }

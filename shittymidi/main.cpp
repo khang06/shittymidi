@@ -37,6 +37,7 @@ int main(int argc, char** argv) {
         size_t previous_string_size = 0;
         size_t current_string_size = 0;
         char message[0x100]; // overkill?
+        uint64_t player_message_len;
 
         std::cout << "Header Chunk:" << std::endl;
         std::cout << "    Length: " << midi->header_len << std::endl;
@@ -79,6 +80,16 @@ int main(int argc, char** argv) {
                 notes_at_last_check = player->played_notes;
                 last_note_check = GetTickCount64();
             }
+            if (player->message_pending) {
+                // it's fine to overwrite the message buffer now because it'll be overwritten right after this anyway
+                player_message_len = strnlen(player->message, 0x100);
+                strncpy_s(message, player->message, player_message_len);
+                if (previous_string_size > player_message_len) {
+                    memset(message + player_message_len, ' ', previous_string_size - player_message_len);
+                    message[previous_string_size + 1] = '\0';
+                }
+                printf("\r%s\n", message);
+            }
             // stringstreams are slow, let's do it c-style!
             // any unused space will be replaced with a space to prevent overlapping if the previous message was longer than the current
             // it only needs to be done once per above case
@@ -99,7 +110,7 @@ int main(int argc, char** argv) {
         delete player;
     }
     catch (const std::exception &e) {
-        std::cout << "An exception occurred: " << e.what() << std::endl;
+        std::cout << std::endl << "An exception occurred: " << e.what() << std::endl;
         return 2;
     }
     return 0;
