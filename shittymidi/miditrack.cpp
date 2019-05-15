@@ -44,5 +44,6 @@ uint32_t MidiTrack::ReadVlq() {
         value <<= 7;
         value += temp;
     }
+    //std::cout << value << std::endl;
     return value;
 }

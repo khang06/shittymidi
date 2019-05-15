@@ -30,4 +30,5 @@ private:
     void ProcessCommand(MidiTrack& track);
     void NoteEvent(bool status, uint8_t note, uint8_t velocity, uint8_t channel);
     void SendMessageToConsole(const char* format, ...);
+    std::vector<uint32_t> translated_midi;
 };
