@@ -1,5 +1,5 @@
 # shittymidi
-a minimal, fast, and shitty midi player that isn't fit for any use cases
+a minimal, fast, and shitty midi player that's so minimal, your synth is the bottleneck
 
 done for fun, don't expect very serious work
 
@@ -20,19 +20,19 @@ if using this for any black midi stuff, i'd recommend installing omnimidi *and* 
 # compatibility
 i threw random midi files i had laying around on my computer at this, here's how they're currently handled
 
-`onestop.mid` - tracks desync a few seconds into it, and it just gets worse (actually kind of funny)
+`onestop.mid` - works
 
-`(black score) Last Brutal Sister Flandre S 110 Million Notes.mid` - actually plays pretty well, can't tell if it desynced anywhere though
+`(black score) Last Brutal Sister Flandre S 110 Million Notes.mid` - plays pretty well
 
 `Bad Apple Acer Variation.mid` - sounds perfect to me
 
-`Septette for the Dead Princess 14.9 million.mid` - desyncs at some point
+`Septette for the Dead Princess 14.9 million.mid` - tempo might be messed up at some points
 
 `jinjenia redzone black.mid` - sounds perfect to me
 
 # todo (in no specific order)
-- [ ] fix desyncs on most midis (very very important)
-- [ ] use tables instead of switch case (is this actually faster?)
+- [x] fix desyncs on most midis (very very important)
+- [ ] ~~use tables instead of switch case (is this actually faster?)~~ no, it's not
 - [x] less buggy note counter
 - [ ] better documentation
 - [ ] better code overall
