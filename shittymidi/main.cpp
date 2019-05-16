@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
             std::cout << "    Length: " << track.length << std::endl;
             i++;
         }
-        
+
         // set up MIDI output stuff
         std::vector<std::wstring> midi_out_devices;
         GetMidiOutDevices(midi_out_devices);
@@ -70,8 +70,19 @@ int main(int argc, char** argv) {
         if (midiOutOpen(&player->midi_out_handle, chosen_device, NULL, 0, NULL) != MMSYSERR_NOERROR)
             throw "Failed to open device!";
 
+        // analyze midi...
+        std::thread analyze_thread(&MidiPlayer::Play, player, true);
+        std::cout << "Analyzing..." << std::endl;
+        analyze_thread.join();
+        player->start_time = 0;
+        player->played_notes = 0;
+        for (auto& track : player->loaded_file->tracks) {
+            track.enabled = true;
+            track.pos = 0;
+        }
+
         // start playing!
-        std::thread midi_thread(&MidiPlayer::Play, player);
+        std::thread midi_thread(&MidiPlayer::Play, player, false);
         std::cout << "Played 0 notes | 0 n/s";
         while (player->playing) {
             if (GetTickCount64() > last_note_check + 1000) {

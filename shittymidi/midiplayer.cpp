@@ -3,11 +3,18 @@
 #include <iostream>
 #include <cstdarg>
 #include <iomanip>
+#include <chrono>
 #include "midiplayer.h"
 
 MidiPlayer::MidiPlayer(MidiFile* file) {
     loaded_file = file;
     tick_length = 500 / file->division; // 500 ms per quarter note
+}
+
+// this exists so the read functions still get executed
+void MidiPlayer::midiOutShortMsgWrapper(HMIDIOUT hmo, DWORD dwMsg) {
+    if (!analyzing)
+        midiOutShortMsg(hmo, dwMsg);
 }
 
 // main thread will handle the rest, this is to prevent interfering with note counter
@@ -28,15 +35,15 @@ void MidiPlayer::NoteEvent(bool status, uint8_t note, uint8_t velocity, uint8_t 
     DWORD message;
 
     message = ((((((channel) & 0x0F | (status ? 9 : 8) << 4) & 0xFF) | ((velocity & 0xFF) << 8)) & 0xFFFF) | ((note & 0xFF) << 16));
-    midiOutShortMsg(midi_out_handle, message);
+    midiOutShortMsgWrapper(midi_out_handle, message);
 }
 
 // this entire function is basically just what TMIDI does, but very slimmed down
-void MidiPlayer::ProcessCommand(MidiTrack& track) {
+void MidiPlayer::ProcessCommand(MidiTrack& track, double emulated_time) {
     uint8_t cmd = track.ReadByte();
     uint32_t len;
     double old_tick_length;
-    double cur_time;
+    double cur_time = emulated_time;
 
     // running mode (whatever that is...)
     if (cmd < 128) {
@@ -82,9 +89,11 @@ void MidiPlayer::ProcessCommand(MidiTrack& track) {
             case 0x51: // Set Tempo (in microseconds per quarter note)
                 old_tick_length = tick_length;
                 tick_length = ((((uint32_t)track.ReadByte() << 16) + ((uint32_t)track.ReadByte() << 8) + ((uint32_t)track.ReadByte())) / loaded_file->division) / (double)1000.0;
-                timeBeginPeriod(1);
-                cur_time = timeGetTime();
-                timeEndPeriod(1);
+                if (!analyzing) {
+                    timeBeginPeriod(1);
+                    cur_time = timeGetTime();
+                    timeEndPeriod(1);
+                }
                 cur_time += 0.000001; // timing hack for Septette for the Dead Princess 14.9 million.mid, if this isn't in place, the tempo only gets set once and the midi plays too slowly
                 for (MidiTrack& track : loaded_file->tracks) {
                     //if (!track.enabled)
@@ -121,11 +130,11 @@ void MidiPlayer::ProcessCommand(MidiTrack& track) {
             case 0x0A: // Polyphonic Key Pressure (Aftertouch)
             case 0x0B: // Control Change
             case 0x0E: // Pitch Wheel
-                midiOutShortMsg(midi_out_handle, ((cmd & 0xFF) | ((track.ReadByte() & 0xFF) << 8)) & 0xFFFF | ((track.ReadByte() & 0xFF) << 16));
+                midiOutShortMsgWrapper(midi_out_handle, ((cmd & 0xFF) | ((track.ReadByte() & 0xFF) << 8)) & 0xFFFF | ((track.ReadByte() & 0xFF) << 16));
                 break;
             case 0x0C: // Program Change
             case 0x0D: // Channel after-touch 
-                midiOutShortMsg(midi_out_handle, ((cmd & 0xFF) | ((track.ReadByte() & 0xFF) << 8)));
+                midiOutShortMsgWrapper(midi_out_handle, ((cmd & 0xFF) | ((track.ReadByte() & 0xFF) << 8)));
                 break;
             case 0x0F: // System Message
                 switch (cmd & 0x0F) {
@@ -162,19 +171,26 @@ void MidiPlayer::ProcessCommand(MidiTrack& track) {
     }
 }
 
-void MidiPlayer::Play() {
-    if (!midi_out_handle)
-        throw "MIDI Out not initialized!";
+void MidiPlayer::Play(bool analyzing_param) {
+    if (analyzing_param)
+        analyzing = true;
+    if (!analyzing) {
+        if (!midi_out_handle)
+            throw "MIDI Out not initialized!";
+    }
 
-    double cur_time;
+    double cur_time = 0;
     double next_trigger;
     bool read_first_event = true;
     bool tracks_still_enabled = true;
     playing = true;
+    auto start = std::chrono::high_resolution_clock::now();
     while (true) {
-        timeBeginPeriod(1);
-        cur_time = timeGetTime();
-        timeEndPeriod(1);
+        if (!analyzing) {
+            timeBeginPeriod(1);
+            cur_time = timeGetTime();
+            timeEndPeriod(1);
+        }
         next_trigger = cur_time + 1000;
         int track_num = 0;
         for (MidiTrack& track : loaded_file->tracks) {
@@ -185,7 +201,7 @@ void MidiPlayer::Play() {
                 track.cur_event_end = cur_time + track.cur_event_len;
             }
             while (cur_time >= track.cur_event_end) {
-                ProcessCommand(track);
+                ProcessCommand(track, cur_time);
                 if (!track.enabled)
                     break;
                 track.cur_event_len = track.ReadVlq() * tick_length;
@@ -204,25 +220,39 @@ void MidiPlayer::Play() {
         read_first_event = false;
         //cur_time = GetTickCount64();
         
-        while (cur_time < next_trigger) {
-            // who cares if value could be lost? nobody's going to have almost 25 days between MIDI events
-            //std::cout << "Sleeping for " << (uint32_t)next_trigger - cur_time << std::endl;
-            Sleep(static_cast<uint32_t>(next_trigger) - cur_time);
-            //cur_time = GetTickCount64();
-            timeBeginPeriod(1);
-            cur_time = timeGetTime();
-            timeEndPeriod(1);
+        if (!analyzing) {
+            while (cur_time < next_trigger) {
+                // who cares if value could be lost? nobody's going to have almost 25 days between MIDI events
+                //std::cout << "Sleeping for " << (uint32_t)next_trigger - cur_time << std::endl;
+                Sleep(static_cast<uint32_t>(next_trigger) - cur_time);
+                //cur_time = GetTickCount64();
+                timeBeginPeriod(1);
+                cur_time = timeGetTime();
+                timeEndPeriod(1);
+            }
+        }
+        else { // time will be simulated if analyzing
+            if (cur_time < next_trigger) {
+                cur_time = next_trigger;
+            }
         }
         
 
         // check if all tracks got disabled
         tracks_still_enabled = false;
         for (MidiTrack& track : loaded_file->tracks) {
-            if (track.enabled)
+            if (track.enabled) {
                 tracks_still_enabled = true;
+                break;
+            }
         }
         if (!tracks_still_enabled)
             break;
     }
     playing = false;
+    auto end = std::chrono::high_resolution_clock::now();
+    if (analyzing) {
+        std::cout << "Analyzed MIDI in " << ((double)std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000000 << " seconds" << std::endl;
+        analyzing = false;
+    }
 }

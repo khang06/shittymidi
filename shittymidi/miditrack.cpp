@@ -18,7 +18,7 @@ uint32_t MidiTrack::Read32Bits() {
 void MidiTrack::SkipBytes(int32_t bytes) {
     if (pos + bytes > length || pos + bytes < 0)
         throw "Tried to skip out of bounds!";
-    pos = pos + bytes;
+    pos += bytes;
 }
 
 /*
