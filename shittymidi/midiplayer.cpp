@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <chrono>
 #include "midiplayer.h"
+#include "kdmapisupport.h"
 
 MidiPlayer::MidiPlayer(MidiFile* file) {
     loaded_file = file;
@@ -14,7 +15,7 @@ MidiPlayer::MidiPlayer(MidiFile* file) {
 // this exists so the read functions still get executed
 void MidiPlayer::midiOutShortMsgWrapper(HMIDIOUT hmo, DWORD dwMsg) {
     if (!analyzing)
-        midiOutShortMsg(hmo, dwMsg);
+        KShortMsg(dwMsg);
 }
 
 // main thread will handle the rest, this is to prevent interfering with note counter
@@ -89,15 +90,10 @@ void MidiPlayer::ProcessCommand(MidiTrack& track, double emulated_time) {
             case 0x51: // Set Tempo (in microseconds per quarter note)
                 old_tick_length = tick_length;
                 tick_length = ((((uint32_t)track.ReadByte() << 16) + ((uint32_t)track.ReadByte() << 8) + ((uint32_t)track.ReadByte())) / loaded_file->division) / (double)1000.0;
-                if (!analyzing) {
-                    timeBeginPeriod(1);
+                if (!analyzing)
                     cur_time = timeGetTime();
-                    timeEndPeriod(1);
-                }
                 cur_time += 0.000001; // timing hack for Septette for the Dead Princess 14.9 million.mid, if this isn't in place, the tempo only gets set once and the midi plays too slowly
                 for (MidiTrack& track : loaded_file->tracks) {
-                    //if (!track.enabled)
-                    //    continue;
                     track.cur_event_len = ((track.cur_event_end - cur_time) / old_tick_length) * tick_length;
                     track.cur_event_end = cur_time + track.cur_event_len;
                 }
@@ -113,10 +109,8 @@ void MidiPlayer::ProcessCommand(MidiTrack& track, double emulated_time) {
                 track.SkipBytes(2);
                 break;
             default:
-                //std::cout << "Unhandled Meta Event " << std::hex << (uint32_t)cmd << std::dec << std::endl;
                 SendMessageToConsole("Unhandled Meta Event 0x%X", cmd);
         }
-        //std::cout << "Meta Event " << std::hex << (uint32_t)cmd << std::dec << std::endl;
     }
     else {
         switch (cmd >> 4) {
@@ -159,38 +153,28 @@ void MidiPlayer::ProcessCommand(MidiTrack& track, double emulated_time) {
                         // these are probably safe to ignore, so nothing happens here
                         break;
                     default:
-                        //std::cout << "Unhandled System Event " << std::hex << (cmd & 0xF) << std::dec << std::endl;
                         SendMessageToConsole("Unhandled System Event 0x%X", cmd & 0x0F);
                 }
                 break;
             default:
-                //std::cout << "Unhandled MIDI event " << std::hex << (cmd >> 4) << std::dec << std::endl;
                 SendMessageToConsole("Unhandled MIDI Event 0x%X", cmd >> 4);
         }
-        //std::cout << "MIDI Event " << std::hex << (uint32_t)(cmd >> 4) << std::dec << std::endl;
     }
 }
 
 void MidiPlayer::Play(bool analyzing_param) {
     if (analyzing_param)
         analyzing = true;
-    if (!analyzing) {
-        if (!midi_out_handle)
-            throw "MIDI Out not initialized!";
-    }
 
+    timeBeginPeriod(1);
     double cur_time = 0;
     double next_trigger;
     bool read_first_event = true;
     bool tracks_still_enabled = true;
-    playing = true;
     auto start = std::chrono::high_resolution_clock::now();
     while (true) {
-        if (!analyzing) {
-            timeBeginPeriod(1);
+        if (!analyzing)
             cur_time = timeGetTime();
-            timeEndPeriod(1);
-        }
         next_trigger = cur_time + 1000;
         int track_num = 0;
         for (MidiTrack& track : loaded_file->tracks) {
@@ -206,8 +190,6 @@ void MidiPlayer::Play(bool analyzing_param) {
                     break;
                 track.cur_event_len = track.ReadVlq() * tick_length;
                 track.cur_event_end += track.cur_event_len;
-                //std::cout << "event on track " << track_num << " for " << std::fixed << std::setprecision(6) << track.cur_event_len << " " << track.cur_event_end << " " << cur_time << std::endl;
-                //std::cout << "event on track " << track_num << " for " << std::fixed << std::setprecision(6) << track.cur_event_len << std::endl;
             }
             if (!track.enabled)
                 continue;
@@ -218,17 +200,12 @@ void MidiPlayer::Play(bool analyzing_param) {
             track_num++;
         }
         read_first_event = false;
-        //cur_time = GetTickCount64();
         
         if (!analyzing) {
             while (cur_time < next_trigger) {
                 // who cares if value could be lost? nobody's going to have almost 25 days between MIDI events
-                //std::cout << "Sleeping for " << (uint32_t)next_trigger - cur_time << std::endl;
                 Sleep(static_cast<uint32_t>(next_trigger) - cur_time);
-                //cur_time = GetTickCount64();
-                timeBeginPeriod(1);
                 cur_time = timeGetTime();
-                timeEndPeriod(1);
             }
         }
         else { // time will be simulated if analyzing
@@ -236,7 +213,6 @@ void MidiPlayer::Play(bool analyzing_param) {
                 cur_time = next_trigger;
             }
         }
-        
 
         // check if all tracks got disabled
         tracks_still_enabled = false;
@@ -255,4 +231,5 @@ void MidiPlayer::Play(bool analyzing_param) {
         std::cout << "Analyzed MIDI in " << ((double)std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000000 << " seconds" << std::endl;
         analyzing = false;
     }
+    timeEndPeriod(1);
 }

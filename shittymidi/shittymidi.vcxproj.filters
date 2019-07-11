@@ -27,6 +27,9 @@
     <ClCompile Include="miditrack.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="kdmapisupport.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="midifile.h">
@@ -39,6 +42,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="miditrack.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="kdmapisupport.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

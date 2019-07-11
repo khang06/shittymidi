@@ -3,6 +3,7 @@
 #include <fstream>
 #include <cassert>
 #include <vector>
+#include <cstring>
 #include "midifile.h"
 #include "util.h"
 
