@@ -5,6 +5,13 @@
 #include <mmsystem.h>
 #include "midifile.h"
 
+#ifdef USE_OPENGL
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include "gl_util.h"
+#include "piano.h"
+#endif
+
 /*
 typedef struct {
     std::array<uint8_t, 128> note_velocities;
@@ -15,7 +22,8 @@ typedef struct {
 class MidiPlayer {
 public:
     MidiPlayer(MidiFile* file);
-    void Play(bool analyzing = false);
+    ~MidiPlayer();
+    void Play(bool analyzing, volatile bool& done);
 
     MidiFile* loaded_file = nullptr;
     HMIDIOUT midi_out_handle = NULL;
@@ -23,6 +31,7 @@ public:
     double tick_length = 0;
     uint32_t start_time = 0;
     uint64_t played_notes = 0;
+    uint64_t total_notes = 0;
     bool playing = false;
     // a better implementation would be to implement a queue with a std::vector, but that would cause race conditions
     bool message_pending = false;
@@ -30,9 +39,13 @@ public:
     bool analyzing = true;
 
 private:
-    void ProcessCommand(MidiTrack& track, double emulated_time);
-    void NoteEvent(bool status, uint8_t note, uint8_t velocity, uint8_t channel);
+    void ProcessCommand(MidiTrack& track, double emulated_time, int track_idx);
+    void NoteEvent(bool status, uint8_t note, uint8_t velocity, uint8_t channel, int track);
     void SendMessageToConsole(const char* format, ...);
     void midiOutShortMsgWrapper(HMIDIOUT hmo, DWORD dwMsg);
     std::vector<uint32_t> translated_midi;
+#ifdef USE_OPENGL
+    GLFWwindow* window = nullptr;
+    Piano piano;
+#endif
 };

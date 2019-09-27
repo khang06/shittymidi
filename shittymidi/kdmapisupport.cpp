@@ -11,7 +11,7 @@ bool InitKDMApi() {
         mmres = midiOutOpen(&hmo, 0, NULL, 0, NULL);
     }
     if (mmres != MMSYSERR_NOERROR) {
-        // Microsoft GS also failed to initialize, close the app
+        // Microsoft GS also failed to initialize, return false
         return false;
     }
 

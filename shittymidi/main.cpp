@@ -8,6 +8,13 @@
 #include "midiplayer.h"
 #include "kdmapisupport.h"
 
+#ifdef USE_OPENGL
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include "gl_util.h"
+#include "piano.h"
+#endif
+
 int main(int argc, char** argv) {
     if (argc != 2) {
         std::cout << "Usage: " << argv[0] << " [input midi]" << std::endl;
@@ -37,10 +44,16 @@ int main(int argc, char** argv) {
             throw "Couldn't initialize KDMAPI!";
 
         // analyze midi...
-        std::thread analyze_thread(&MidiPlayer::Play, player, true);
+        volatile bool analysis_done = false;
+        std::thread analyze_thread(&MidiPlayer::Play, player, true, std::ref(analysis_done));
         std::cout << "Analyzing..." << std::endl;
-        analyze_thread.join();
+        while (!analysis_done) {
+#ifdef USE_OPENGL
+            // TODO
+#endif
+        }
         player->start_time = 0;
+        player->total_notes = player->played_notes;
         player->played_notes = 0;
         for (auto& track : player->loaded_file->tracks) {
             track.enabled = true;
@@ -48,10 +61,16 @@ int main(int argc, char** argv) {
         }
 
         // start playing!
-        std::thread midi_thread(&MidiPlayer::Play, player, false);
+#ifdef USE_OPENGL
+        // midi player itself will handle rendering if opengl
+        player->Play(false, std::ref(analysis_done));
+#else
+        std::thread midi_thread(&MidiPlayer::Play, player, false, std::ref(analysis_done));
         std::cout << "Played 0 notes | 0 n/s";
         player->playing = true;
-        while (player->playing) {
+#endif
+#ifndef USE_OPENGL
+         while (player->playing) {
             if (GetTickCount64() > last_note_check + 1000) {
                 // slight race condition here but who cares
                 notes_since_last_check = player->played_notes - notes_at_last_check;
@@ -72,7 +91,7 @@ int main(int argc, char** argv) {
             // stringstreams are slow, let's do it c-style!
             // any unused space will be replaced with a space to prevent overlapping if the previous message was longer than the current
             // it only needs to be done once per above case
-            snprintf(message, 0x100, "\rPlayed %llu notes | %llu n/s", player->played_notes, notes_since_last_check);
+            snprintf(message, 0x100, "\rPlayed %llu/%llu notes | %llu n/s", player->played_notes, player->total_notes, notes_since_last_check);
             current_string_size = strnlen(message, 0xF8);
             if (previous_string_size > current_string_size) {
                 memset(message + current_string_size, ' ', previous_string_size - current_string_size);
@@ -84,13 +103,13 @@ int main(int argc, char** argv) {
 
         // wait for the thread to exit
         midi_thread.join();
+#endif
 
         delete midi;
         delete player;
     }
     catch (const std::exception &e) {
         std::cout << std::endl << "An exception occurred: " << e.what() << std::endl;
-        return 2;
     }
     return 0;
 }

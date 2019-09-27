@@ -7,9 +7,42 @@
 #include "midiplayer.h"
 #include "kdmapisupport.h"
 
+#ifdef USE_OPENGL
+#include <time.h>
+#include <stdlib.h>
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include "gl_util.h"
+#include "piano.h"
+#endif
+
 MidiPlayer::MidiPlayer(MidiFile* file) {
     loaded_file = file;
     tick_length = 500 / file->division; // 500 ms per quarter note
+#ifdef USE_OPENGL
+    if (init_gl(window))
+        throw "idk how your computer can't initialize opengl but it can't\n";
+    glClearColor(0.35, 0.35, 0.35, 1.0);
+    piano.LoadShaders();
+    piano.LoadKeyboardData();
+    srand(time(NULL));
+    for (int i = 0; i < file->tracks.size(); i++) {
+        for (int j = 0; j < 16; j++) {
+            float color[4];
+            color[0] = (float)(rand() % 256) / 256.0;
+            color[1] = (float)(rand() % 256) / 256.0;
+            color[2] = (float)(rand() % 256) / 256.0;
+            color[3] = 1.0;
+            piano.AddToColorTable(color);
+        }
+    }
+#endif
+}
+
+MidiPlayer::~MidiPlayer() {
+#ifdef USE_OPENGL
+    glfwTerminate();
+#endif
 }
 
 // this exists so the read functions still get executed
@@ -30,24 +63,28 @@ void MidiPlayer::SendMessageToConsole(const char* format, ...) {
     //message_pending = true;
 }
 
-void MidiPlayer::NoteEvent(bool status, uint8_t note, uint8_t velocity, uint8_t channel) {
+void MidiPlayer::NoteEvent(bool status, uint8_t note, uint8_t velocity, uint8_t channel, int track) {
     // status = 0 = note off
     // status = 1 = note on
     DWORD message;
 
     message = ((((((channel) & 0x0F | (status ? 9 : 8) << 4) & 0xFF) | ((velocity & 0xFF) << 8)) & 0xFFFF) | ((note & 0xFF) << 16));
     midiOutShortMsgWrapper(midi_out_handle, message);
+#ifdef USE_OPENGL
+    if (!analyzing)
+        status ? piano.NoteOn((track * 16) + channel, note) : piano.NoteOff((track * 16) + channel, note);
+#endif
 }
 
 // this entire function is basically just what TMIDI does, but very slimmed down
-void MidiPlayer::ProcessCommand(MidiTrack& track, double emulated_time) {
+void MidiPlayer::ProcessCommand(MidiTrack& track, double emulated_time, int track_idx) {
     uint8_t cmd = track.ReadByte();
     uint32_t len;
     double old_tick_length;
     double cur_time = emulated_time;
 
-    // running mode (whatever that is...)
-    if (cmd < 128) {
+    // running mode
+    if (!(cmd & 0x80)) {
         track.SkipBytes(-1);
         if (!track.last_cmd_initialized)
             throw "Tried to use uninitialized last_cmd!";
@@ -115,10 +152,10 @@ void MidiPlayer::ProcessCommand(MidiTrack& track, double emulated_time) {
     else {
         switch (cmd >> 4) {
             case 0x08: // Note Off
-                NoteEvent(false, track.ReadByte(), track.ReadByte(), cmd & 0xF);
+                NoteEvent(false, track.ReadByte(), track.ReadByte(), cmd & 0xF, track_idx);
                 break;
             case 0x09: // Note On
-                NoteEvent(true, track.ReadByte(), track.ReadByte(), cmd & 0xF);
+                NoteEvent(true, track.ReadByte(), track.ReadByte(), cmd & 0xF, track_idx);
                 played_notes++;
                 break;
             case 0x0A: // Polyphonic Key Pressure (Aftertouch)
@@ -156,13 +193,13 @@ void MidiPlayer::ProcessCommand(MidiTrack& track, double emulated_time) {
                         SendMessageToConsole("Unhandled System Event 0x%X", cmd & 0x0F);
                 }
                 break;
-            default:
-                SendMessageToConsole("Unhandled MIDI Event 0x%X", cmd >> 4);
+            //default:
+                //SendMessageToConsole("Unhandled MIDI Event 0x%X", cmd >> 4);
         }
     }
 }
 
-void MidiPlayer::Play(bool analyzing_param) {
+void MidiPlayer::Play(bool analyzing_param, volatile bool& done) {
     if (analyzing_param)
         analyzing = true;
 
@@ -177,7 +214,8 @@ void MidiPlayer::Play(bool analyzing_param) {
             cur_time = timeGetTime();
         next_trigger = cur_time + 1000;
         int track_num = 0;
-        for (MidiTrack& track : loaded_file->tracks) {
+        for (int i = 0; i < loaded_file->tracks.size(); i++) {
+            MidiTrack& track = loaded_file->tracks[i];
             if (!track.enabled)
                 continue;
             if (read_first_event) {
@@ -185,7 +223,7 @@ void MidiPlayer::Play(bool analyzing_param) {
                 track.cur_event_end = cur_time + track.cur_event_len;
             }
             while (cur_time >= track.cur_event_end) {
-                ProcessCommand(track, cur_time);
+                ProcessCommand(track, cur_time, i);
                 if (!track.enabled)
                     break;
                 track.cur_event_len = track.ReadVlq() * tick_length;
@@ -203,8 +241,14 @@ void MidiPlayer::Play(bool analyzing_param) {
         
         if (!analyzing) {
             while (cur_time < next_trigger) {
-                // who cares if value could be lost? nobody's going to have almost 25 days between MIDI events
+#ifdef USE_OPENGL
+                // Screen still has to refresh
+                piano.Draw();
+                glfwSwapBuffers(window);
+                glfwPollEvents();
+#else
                 Sleep(static_cast<uint32_t>(next_trigger) - cur_time);
+#endif
                 cur_time = timeGetTime();
             }
         }
@@ -232,4 +276,6 @@ void MidiPlayer::Play(bool analyzing_param) {
         analyzing = false;
     }
     timeEndPeriod(1);
+
+    done = true;
 }
